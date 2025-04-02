@@ -1,0 +1,44 @@
+.game-container {
+    text-align: center;
+    font-family: Arial, sans-serif;
+    padding: 20px;
+  }
+  
+  button {
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    background-color: #1976d2;
+    color: white;
+    border: none;
+    border-radius: 5px;
+  }
+  
+  button:hover {
+    background-color: #1565c0;
+  }
+
+  .word-container {
+    margin-top: 50px;
+    font-size: 30px;
+    font-weight: bold;
+    display: inline-block;
+    animation: rotateWord 5s linear infinite;
+    transform-origin: center; /* 회전 중심을 중앙으로 설정 */
+  }
+  
+  .word {
+    margin-top: 50px;
+    font-size: 30px;
+    font-weight: bold;
+    animation: rotateWord 5s linear infinite;
+  }
+  
+  @keyframes rotateWord {
+    0% {
+      transform: rotate(0deg); /* 처음엔 회전하지 않음 */
+    }
+    100% {
+      transform: rotate(360deg); /* 360도 회전 */
+    }
+  }
