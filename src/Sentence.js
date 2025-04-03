@@ -135,7 +135,6 @@ function Sentence() {
   const evaluateAccuracy = (correctSentence, spokenText) => {
     const cleanAndSplit = (text) =>
       text
-        .toLowerCase()
         .replace(/[^a-z.\s\n]/g, '')
         .split(/(\s+|\n)/);
 

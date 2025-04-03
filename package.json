@@ -2,7 +2,7 @@
   "name": "game_pronunciation",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://kbyunghak.github.io/pronunciation_game",
+  "homepage": "https://kbyunghak.github.io/game_pronunciation",
   "dependencies": {
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
