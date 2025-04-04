@@ -1,3 +1,4 @@
+// Updated Voca component with background music and level-based background (timer removed)
 import React, { useState, useEffect, useRef } from 'react';
 import sentences from './data/sentences.json';
 
@@ -6,6 +7,7 @@ function Voca() {
   const recognitionRef = useRef(null);
   const spawnIntervalRef = useRef(null);
   const animationRef = useRef(null);
+  const audioRef = useRef(null);
 
   const [fallingWords, setFallingWords] = useState([]);
   const [spokenWord, setSpokenWord] = useState('');
@@ -15,33 +17,41 @@ function Voca() {
   const [lives, setLives] = useState(20);
   const [isGameActive, setIsGameActive] = useState(false);
   const [missedWords, setMissedWords] = useState([]);
-  const words = sentences.hardWords;
 
+  const words = sentences.hardWords;
   const canvasHeight = 700;
   const wordFontSize = 20;
   const wordColor = '#1976d2';
   const hasStartedRef = useRef(false);
 
-  const getFallSpeed = () => Math.max(250 - level * 10, 30); // slower
+  const levelBackgrounds = ['#f9f9f9', '#f0f4c3', '#ffe0b2', '#d1c4e9', '#b2ebf2'];
+  const getBackgroundColor = () => levelBackgrounds[(level - 1) % levelBackgrounds.length];
+
+  const getFallSpeed = () => Math.max(250 - level * 10, 30);
   const calculatePixelsPerFrame = () => canvasHeight / (getFallSpeed() * 60);
   const [pixelsPerFrame, setPixelsPerFrame] = useState(calculatePixelsPerFrame());
 
-  useEffect(() => {
-    setPixelsPerFrame(calculatePixelsPerFrame());
-  }, [level]);
+  useEffect(() => setPixelsPerFrame(calculatePixelsPerFrame()), [level]);
 
   useEffect(() => {
     if (!isGameActive) return;
-
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
 
     const animate = () => {
       ctx.clearRect(0, 0, canvas.width, canvasHeight);
       ctx.font = `${wordFontSize}px Arial`;
-      ctx.fillStyle = wordColor;
 
-      fallingWords.forEach((word) => ctx.fillText(word.text, word.x, word.y));
+      fallingWords.forEach((word) => {
+        if (spokenCorrectWords.has(word.text)) {
+          ctx.fillStyle = 'green';
+        } else if (missedWords.includes(word.text)) {
+          ctx.fillStyle = 'red';
+        } else {
+          ctx.fillStyle = wordColor;
+        }
+        ctx.fillText(word.text, word.x, word.y);
+      });
 
       setFallingWords((prev) => {
         const updated = prev.map((w) => ({ ...w, y: w.y + pixelsPerFrame }));
@@ -62,6 +72,8 @@ function Voca() {
     return () => cancelAnimationFrame(animationRef.current);
   }, [isGameActive, pixelsPerFrame, fallingWords]);
 
+  const normalizeWord = (text) => text.toLowerCase().replace(/[^a-z]/gi, '');
+
   const startRecognition = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return alert('Speech Recognition not supported');
@@ -74,12 +86,13 @@ function Voca() {
     recognition.onresult = (e) => {
       const transcript = e.results[e.results.length - 1][0].transcript.trim().toLowerCase();
       setSpokenWord(transcript);
-      const spokenWords = transcript.split(' ');
+      const spokenWords = transcript.split(/\s+/);
 
       setFallingWords((prev) => {
         let updated = [...prev];
         spokenWords.forEach((spoken) => {
-          const index = updated.findIndex((w) => w.text.toLowerCase() === spoken);
+          const normalizedSpoken = normalizeWord(spoken);
+          const index = updated.findIndex((w) => normalizeWord(w.text) === normalizedSpoken);
           if (index !== -1) {
             const matchedWord = updated.splice(index, 1)[0].text;
             setSpokenCorrectWords((prevSet) => new Set(prevSet).add(matchedWord));
@@ -96,7 +109,6 @@ function Voca() {
       });
     };
 
-    // 🔄 Prevent mic auto-close
     recognition.onend = () => {
       if (isGameActive) recognition.start();
     };
@@ -128,14 +140,17 @@ function Voca() {
     setPixelsPerFrame(calculatePixelsPerFrame());
     startRecognition();
 
-    // ⏱ First word immediately
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play();
+    }
+
     setFallingWords(() => {
       const word = words[Math.floor(Math.random() * words.length)];
       const x = Math.random() * (canvasRef.current.width - 80);
       return [{ text: word, x, y: 0 }];
     });
 
-    // ⏱ Then interval
     spawnIntervalRef.current = setInterval(() => {
       setFallingWords((prev) => {
         if (prev.length >= getMaxWordsByLevel(level)) return prev;
@@ -143,7 +158,7 @@ function Voca() {
         const x = Math.random() * (canvasRef.current.width - 80);
         return [...prev, { text: word, x, y: 0 }];
       });
-    }, 2000); // slower interval
+    }, 2000);
   };
 
   useEffect(() => {
@@ -164,27 +179,27 @@ function Voca() {
     return () => window.removeEventListener('resize', resizeCanvas);
   }, []);
 
+  const accuracy = (spokenCorrectWords.size + missedWords.length) > 0
+    ? `${Math.round((spokenCorrectWords.size / (spokenCorrectWords.size + missedWords.length)) * 100)}%`
+    : '-';
+
   return (
-    <div style={{ backgroundColor: '#f5f7fa', padding: '20px' }}>
+    <div style={{ backgroundColor: getBackgroundColor(), padding: '20px' }}>
+
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px', backgroundColor: '#fff', borderRadius: '20px', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
-        <h1 style={{ textAlign: 'center' }}>🎤 Word Pronunciation Game</h1>
+        <h1 style={{ textAlign: 'center' }}>🎙 Word Pronunciation Game</h1>
 
-        <div style={{ padding: '10px 15px', border: '1px solid #ccc', borderRadius: '10px', backgroundColor: '#f0f8ff' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <p>📈 <strong>Level:</strong> {level}</p>
-            <p>💯 <strong>Score:</strong> {score}</p>
-            <p>❤️ <strong>Lives:</strong>{' '}
-                <span style={{ display: 'inline-block', minWidth: '300px' }}>
-                  {'❤️'.repeat(lives)}
-                </span>
-            </p>
+        <div style={{ padding: '10px 15px', border: '1px solid #ccc', borderRadius: '10px', backgroundColor: '#e3f2fd', marginBottom: '10px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: '10px' }}>
+              <p>🧩 <strong>Level:</strong> {level}</p>
+              <p>💯 <strong>Score:</strong> {score}</p>
+              <p>❤️ <strong>Lives:</strong>{' '} {'❤️'.repeat(Math.min(lives, 10))} {lives > 10 ? `(${lives})` : ''}</p>
+              <p>🎯 <strong>Accuracy:</strong> {accuracy}</p>                            
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <p>🗣️ <strong>You said:</strong> {spokenWord}</p>
-            <p>🎯 <strong>Accuracy:</strong> {Math.round((spokenCorrectWords.size / (spokenCorrectWords.size + missedWords.length)) * 100)}%</p>
-          </div>
+          <div>
+            <p> 🗣️ <strong>You said:</strong> {spokenWord} </p>         
+          </div>         
         </div>
-
         <canvas
           ref={canvasRef}
           height={canvasHeight}
@@ -192,7 +207,7 @@ function Voca() {
             width: '100%',
             border: '2px solid #1976d2',
             borderRadius: '12px',
-            backgroundColor: '#f9f9f9',
+            backgroundColor: '#ffffff',
             display: 'block',
             margin: '20px auto',
           }}
@@ -214,13 +229,7 @@ function Voca() {
             }}
           >
             ▶️ Start Game
-          </button>
-          <div style={{ fontWeight: 'bold', marginTop: '15px' }}>
-            {isGameActive && '🎮 Game Start'}
-            {!isGameActive && lives === 20 && !hasStartedRef.current && score === 0 && '🎮 Please click Start Game button.'}
-            {!isGameActive && lives === 0 && hasStartedRef.current && `🎮 Game Over! Final Score: ${score}`}
-            {!isGameActive && lives > 0 && level > 11 && '🎉 Game Result: Mission Complete!'}
-          </div>
+          </button>         
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>

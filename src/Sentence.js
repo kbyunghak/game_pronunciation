@@ -255,22 +255,7 @@ function Sentence() {
             {/* Sentence Section */}
             <div style={{ backgroundColor: '#f1f8e9', padding: '20px', borderRadius: '12px', marginBottom: '20px' }}>
               <p style={{ fontSize: '20px', fontWeight: 'bold', color: 'black' }}>
-                ✍️ Sentence:
-                <button
-                  onClick={handleNextSentence}
-                  style={{
-                    padding: '10px 20px',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '15px',
-                    fontWeight: 'bold',
-                    fontSize: '16px',
-                    backgroundColor: '#9c27b0',
-                    marginLeft: '10px',
-                    float: "right"
-                  }}>
-                  👉 Next Sentence
-                </button>
+                ✍️ Sentence:              
               </p>
               <p style={{ fontSize: '20px', fontWeight: 'bold', color: 'black' }}>{currentSentence}</p>
               <p style={{ fontSize: '20px', fontWeight: 'bold' }}>🎤 You said:</p>
@@ -296,7 +281,8 @@ function Sentence() {
                   fontSize: '16px',
                   marginBottom: '20px',
                   marginRight: '10px',
-                  backgroundColor: buttonState === 'Stop Speaking' ? '#e53935' : '#1976d2'
+                  backgroundColor: buttonState === 'Stop Speaking' ? '#e53935' : '#1976d2',
+                  cursor: 'pointer'
                 }}>
                 {buttonState === 'Stop Speaking' ? '🛑 Stop Speaking' : '🎙 Start Speaking'}
               </button>
@@ -309,8 +295,24 @@ function Sentence() {
                   borderRadius: '15px',
                   fontWeight: 'bold',
                   fontSize: '16px',
-                  backgroundColor: '#4caf50'
+                  backgroundColor: '#4caf50',
+                  cursor: 'pointer'
                 }}>📢 Read</button>
+              <button
+                  onClick={handleNextSentence}
+                  style={{
+                    padding: '10px 20px',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '15px',
+                    fontWeight: 'bold',
+                    fontSize: '16px',
+                    backgroundColor: '#9c27b0',
+                    marginLeft: '10px',
+                    cursor: 'pointer'
+                  }}>
+                  👉 Next Sentence
+                </button>
             </div>
           </>
         )}
