@@ -1,3 +1,6 @@
+// This version includes redesigned sections with distinct background colors
+// and improved sensitivity selection layout
+
 import React, { useState, useEffect, useRef } from 'react';
 import sentences from './data/sentences.json';
 
@@ -23,11 +26,12 @@ function Sentence() {
   const [difficulty, setDifficulty] = useState('beginner');
   const [currentSentence, setCurrentSentence] = useState('');
   const [transcript, setTranscript] = useState('');
-  const [accuracy, setAccuracy] = useState(null);
-  const [feedbackWords, setFeedbackWords] = useState([]);
+  const [finalAccuracy, setFinalAccuracy] = useState(null);
+  const [finalFeedback, setFinalFeedback] = useState([]);
   const [buttonState, setButtonState] = useState('Start Speaking');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [sensitivity, setSensitivity] = useState('Normal');
   const recognitionRef = useRef(null);
 
   useEffect(() => {
@@ -49,13 +53,8 @@ function Sentence() {
     const nextSentence = list[index % list.length];
     setCurrentSentence(nextSentence);
     setTranscript('');
-    setAccuracy(null);
-    setFeedbackWords(
-      nextSentence.split(/(\s+|\n)/).map((word) => {
-        if (word.trim() === '') return { word, correct: null };
-        return { word, correct: null };
-      })
-    );
+    setFinalAccuracy(null);
+    setFinalFeedback([]);
   };
 
   const handleLevelChange = (level) => {
@@ -69,6 +68,17 @@ function Sentence() {
   };
 
   const handleStartSpeaking = () => {
+    if (isSpeaking) {
+      recognitionRef.current?.stop();
+      setButtonState('Start Speaking');
+      setIsSpeaking(false);
+      return;
+    }
+
+    setFinalAccuracy(null);
+    setFinalFeedback([]);
+    setTranscript('');
+
     if (recognitionRef.current) {
       recognitionRef.current.abort();
       recognitionRef.current = null;
@@ -84,40 +94,85 @@ function Sentence() {
     const recognition = new SpeechRecognition();
     recognitionRef.current = recognition;
     recognition.lang = 'en-US';
-    recognition.interimResults = true;
+    recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognition.continuous = true;
 
-    let finalTranscript = '';
+    let tempTranscript = '';
 
-    setButtonState('Speaking');
+    setButtonState('Stop Speaking');
     setIsSpeaking(true);
 
     recognition.onresult = (event) => {
-      let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        const result = event.results[i];
-        if (result.isFinal) {
-          finalTranscript += result[0].transcript + ' ';
-        } else {
-          interim += result[0].transcript;
-        }
+      const result = event.results[event.results.length - 1][0].transcript.trim();
+      tempTranscript += ' ' + result;
+      setTranscript(tempTranscript.trim());
+
+      if (difficulty === 'beginner') {
+        clearTimeout(recognitionRef.current._timeout);
+        recognitionRef.current._timeout = setTimeout(() => recognition.stop(), 2000);
       }
-      const fullText = finalTranscript.trim();
-      setTranscript(fullText);
-      evaluateAccuracy(currentSentence, fullText);
+    };
+
+    recognition.onend = () => {
+      setButtonState('Start Speaking');
+      setIsSpeaking(false);
+
+      if (tempTranscript) {
+        const wordsCorrect = evaluateWords(currentSentence, tempTranscript.trim(), sensitivity);
+        setFinalFeedback(wordsCorrect);
+        const totalCorrect = wordsCorrect.filter(w => w.correct).length;
+        const totalWords = wordsCorrect.filter(w => w.word.trim() !== '').length;
+        const percent = Math.round((totalCorrect / totalWords) * 100);
+        setFinalAccuracy(percent);
+      }
     };
 
     recognition.onerror = (event) => {
       console.error('Speech recognition error:', event.error);
     };
 
-    recognition.onend = () => {
-      setButtonState('Start Speaking');
-      setIsSpeaking(false);
-    };
-
     recognition.start();
+  };
+
+  const isSimilar = (a, b, level = 'Normal') => {
+    if (!a || !b) return false;
+    const normalize = (str) => str.toLowerCase().replace(/[.,!?]/g, '');
+    const w1 = normalize(a);
+    const w2 = normalize(b);
+
+    let matches = 0;
+    const minLen = Math.min(w1.length, w2.length);
+    for (let i = 0; i < minLen; i++) {
+      if (w1[i] === w2[i]) matches++;
+    }
+    const similarity = matches / Math.max(w1.length, w2.length);
+
+    const threshold = level === 'Strict' ? 0.98 : level === 'Normal' ? 0.75 : 0.1;
+    return similarity >= threshold;
+  };
+
+  const evaluateWords = (correctSentence, spokenSentence, level) => {
+    const normalize = (text) =>
+      text.toLowerCase().replace(/[.,!?]/g, '').split(/\s+/);
+    const originalWords = correctSentence.split(/\s+/);
+    const spokenWords = normalize(spokenSentence);
+
+    return originalWords.map((word, i) => {
+      const normalized = word.toLowerCase().replace(/[.,!?]/g, '');
+      const spoken = spokenWords[i] || '';
+      return {
+        word: spoken,
+        correct: spoken === normalized || isSimilar(spoken, normalized, level)
+      };
+    });
+  };
+
+  const handleNextSentence = () => {
+    const list = sentences[difficulty];
+    const nextIndex = (currentIndex + 1) % list.length;
+    setCurrentIndex(nextIndex);
+    setRandomSentence(difficulty, nextIndex);
   };
 
   const handleReadSentence = () => {
@@ -132,121 +187,103 @@ function Sentence() {
     window.speechSynthesis.speak(speech);
   };
 
-  const evaluateAccuracy = (correctSentence, spokenText) => {
-    const cleanAndSplit = (text) =>
-      text
-        .replace(/[^a-z.\s\n]/g, '')
-        .split(/(\s+|\n)/);
-
-    const correctWords = cleanAndSplit(correctSentence);
-    const spokenWords = cleanAndSplit(spokenText);
-
-    let matchCount = 0;
-    let feedback = correctWords.map((word, i) => {
-      if (word.trim() === '') return { word, correct: null };
-      const spoken = spokenWords[i] || '';
-      const isCorrect = spoken === word;
-      if (isCorrect) matchCount++;
-      return { word, correct: isCorrect };
-    });
-
-    const filteredCorrect = correctWords.filter(w => w.trim() !== '');
-    const percent = Math.round((matchCount / filteredCorrect.length) * 100);
-    setAccuracy(percent);
-    setFeedbackWords(feedback);
-  };
-
-  const renderFeedback = () => {
-    const mistakes = feedbackWords.filter(w => w.correct === false);
-    if (mistakes.length === 0) return null;
-
-    const uniqueMistakes = [...new Set(mistakes.map(w => w.word))];
-
-    return (
-      <div style={{ marginTop: '20px', background: '#fff3f3', padding: '15px', borderRadius: '10px', border: '1px solid #ffcdd2' }}>
-        <h4 style={{ color: '#d32f2f', marginBottom: '10px' }}>⚠️ Mispronounced Words:</h4>
-        <ul style={{ paddingLeft: '20px', margin: 0 }}>
-          {uniqueMistakes.map((word, i) => (
-            <li key={i} style={{ color: '#d32f2f', fontWeight: 'bold' }}>
-              "{word}"
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  };
-
-  const handleNextSentence = () => {
-  const list = sentences[difficulty];
-  const nextIndex = (currentIndex + 1) % list.length;
-  setCurrentIndex(nextIndex);
-  setRandomSentence(difficulty, nextIndex);
-};
-
   return (
     <div style={{ backgroundColor: '#f5f7fa', padding: '20px' }}>
-      <div style={{ maxWidth: '700px', margin: '0 auto', padding: '30px', borderRadius: '20px', backgroundColor: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+      <div style={{
+        maxWidth: '700px',
+        margin: '0 auto',
+        padding: '30px',
+        borderRadius: '20px',
+        backgroundColor: '#fff',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+      }}>
         {!loaded ? (
           <>
-            <h1>📚 Loading Sentences</h1>
+            <h1>⏳ Loading Sentences</h1>
             <ProgressBar progress={progress} />
           </>
         ) : (
           <>
-            <h2 style={{ marginBottom: '20px' }}>✅ Select Difficulty</h2>
-            <div style={{ marginBottom: '20px' }}>
-              {['beginner', 'intermediate', 'advanced'].map((lvl) => (
+            {/* Difficulty Section */}
+            <div style={{ backgroundColor: '#e3f2fd', padding: '20px', borderRadius: '12px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                <h3 style={{ marginBottom: '10px' }}>🧠 Difficulty</h3>
+                {['beginner', 'intermediate', 'advanced'].map((lvl) => (
+                  <button
+                    key={lvl}
+                    onClick={() => handleLevelChange(lvl)}
+                    style={{
+                      backgroundColor: difficulty === lvl ? '#1976d2' : '#fff',
+                      color: difficulty === lvl ? '#fff' : '#1976d2',
+                      border: '2px solid #1976d2',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      fontWeight: 'bold',
+                      margin: '0 6px',
+                      cursor: 'pointer'
+                    }}>
+                    {lvl === 'beginner' ? '📘 Beginner' : lvl === 'intermediate' ? '📗 Intermediate' : '📕 Advanced'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Sensitivity Section */}
+            <div style={{ backgroundColor: '#fff3e0', padding: '20px', borderRadius: '12px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                <h3 style={{ marginBottom: '10px' }}>🎚️ Sensitivity</h3>
+                {['Strict', 'Normal', 'Loose'].map((level) => (
+                  <button
+                    key={level}
+                    onClick={() => setSensitivity(level)}
+                    style={{
+                      backgroundColor: sensitivity === level ? '#fb8c00' : '#fff',
+                      color: sensitivity === level ? '#fff' : '#fb8c00',
+                      border: '2px solid #fb8c00',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      fontWeight: 'bold',
+                      margin: '0 6px',
+                      cursor: 'pointer'
+                    }}>
+                    {level === 'Strict' ? '🔒 Strict' : level === 'Normal' ? '⚖️ Normal' : '🎈 Loose'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Sentence Section */}
+            <div style={{ backgroundColor: '#f1f8e9', padding: '20px', borderRadius: '12px', marginBottom: '20px' }}>
+              <p style={{ fontSize: '20px', fontWeight: 'bold', color: 'black' }}>
+                ✍️ Sentence:
                 <button
-                  key={lvl}
-                  onClick={() => handleLevelChange(lvl)}
+                  onClick={handleNextSentence}
                   style={{
-                    backgroundColor: difficulty === lvl ? '#1976d2' : '#fff',
-                    color: difficulty === lvl ? '#fff' : '#1976d2',
-                    border: '2px solid #1976d2',
-                    padding: '10px 14px',
-                    borderRadius: '10px',
+                    padding: '10px 20px',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '15px',
                     fontWeight: 'bold',
-                    margin: '0 6px',
-                    cursor: 'pointer'
+                    fontSize: '16px',
+                    backgroundColor: '#9c27b0',
+                    marginLeft: '10px',
+                    float: "right"
                   }}>
-                  {lvl === 'beginner' ? '📘 Beginner' : lvl === 'intermediate' ? '📗 Intermediate' : '📕 Advanced'}
+                  👉 Next Sentence
                 </button>
-              ))}
-            </div>
-
-            <div style={{ marginBottom: '20px' }}>
-              <p style={{ fontSize: '20px', fontWeight: 'bold', color: 'black', whiteSpace: 'pre-wrap' }}>📘 Sentence:
-              <button
-                onClick={handleNextSentence}
-                style={{
-                  padding: '10px 20px',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '15px',
-                  fontWeight: 'bold',
-                  fontSize: '16px',
-                  backgroundColor: '#9c27b0',
-                  marginLeft: '10px',
-                  float: "right"                  
-                }}>
-                ⏭ Next Sentence
-              </button>
               </p>
-         
-              <p style={{ fontSize: '20px', fontWeight: 'bold', color: 'black', whiteSpace: 'pre-wrap', backgroundcolor: '#f0f8ff' }}>{currentSentence}</p>
-              <p style={{ fontSize: '20px', fontWeight: 'bold', whiteSpace: 'pre-wrap' }}>
-                {feedbackWords.map((item, index) => {
-                  if (item.correct === null) {
-                    return <span key={index} style={{ color: '#888', marginRight: '4px' }}>{item.word}</span>;
-                  }
-                  const color = item.correct ? 'green' : 'red';
-                  return (
-                    <span key={index} style={{ color, marginRight: '4px' }}>{item.word}</span>
-                  );
+              <p style={{ fontSize: '20px', fontWeight: 'bold', color: 'black' }}>{currentSentence}</p>
+              <p style={{ fontSize: '20px', fontWeight: 'bold' }}>🎤 You said:</p>
+              <div style={{ fontSize: '20px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                {finalFeedback.map((item, index) => {
+                  const color = item.correct === null ? '#888' : item.correct ? 'green' : 'red';
+                  return <span key={index} style={{ color, marginRight: '4px' }}>{item.word}</span>;
                 })}
-              </p>
+              </div>
+              <p style={{ fontSize: '20px', fontWeight: 'bold', color: '#2e7d32' }}>📊 Accuracy: {finalAccuracy !== null ? `${finalAccuracy}%` : '-'}</p>
             </div>
 
+            {/* Controls */}
             <div>
               <button
                 onClick={handleStartSpeaking}
@@ -259,9 +296,9 @@ function Sentence() {
                   fontSize: '16px',
                   marginBottom: '20px',
                   marginRight: '10px',
-                  backgroundColor: buttonState === 'Speaking' ? '#e53935' : '#1976d2'
+                  backgroundColor: buttonState === 'Stop Speaking' ? '#e53935' : '#1976d2'
                 }}>
-                {buttonState === 'Speaking' ? '🔴 Speaking' : '🎙 Start Speaking'}
+                {buttonState === 'Stop Speaking' ? '🛑 Stop Speaking' : '🎙 Start Speaking'}
               </button>
               <button
                 onClick={handleReadSentence}
@@ -273,13 +310,7 @@ function Sentence() {
                   fontWeight: 'bold',
                   fontSize: '16px',
                   backgroundColor: '#4caf50'
-                }}>🔊 Read</button>    
-            </div>
-
-            <div style={{ marginTop: '10px' }}>
-              <p><strong>🗣 You said:</strong> {transcript}</p>
-              <p><strong>🎯 Accuracy:</strong> {accuracy !== null ? `${accuracy}%` : '-'}</p>
-              {renderFeedback()}
+                }}>📢 Read</button>
             </div>
           </>
         )}
